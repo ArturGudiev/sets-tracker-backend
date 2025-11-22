@@ -2,13 +2,13 @@ from typing import Optional
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, func
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-from models import Set, SetBase, SetResponse, SetGroupedResponse
+from models import Base, BigSet, Set
+from schemas import BigSetResponse, SetGroupedResponse, SetResponse, SetBase
 
 # Load environment variables
 load_dotenv()
@@ -20,7 +20,7 @@ DATABASE_URL = os.getenv(
 )
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -98,6 +98,11 @@ async def read_items(db: Session = Depends(get_db)):
     results = db.query(Set.description, func.count(Set.id).label('count')).filter(func.date(
         Set.date) == datetime.now().date()).group_by(Set.description).all()
     return [SetGroupedResponse(description=desc, count=count) for desc, count in results]
+    
+@app.get("/big-sets/", response_model=list[BigSetResponse])
+async def read_items(db: Session = Depends(get_db)):    
+    results = db.query(BigSet.id, BigSet.description).all()
+    return [BigSetResponse(id=obj.id, description=obj.description, created=obj.created, finished=obj.finished) for obj in results]
     
 
 

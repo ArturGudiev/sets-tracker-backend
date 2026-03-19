@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, DateTime, Interval, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Interval, String
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -15,6 +15,7 @@ class Set(Base):
     description = Column(String, index=True)
     comments = Column(String, nullable=True)
     distractions = Column(Integer, default=0)
+    big_set_id = Column(Integer, ForeignKey("big_sets.id"), nullable=True, index=True)
 
 
 class BigSet(Base):

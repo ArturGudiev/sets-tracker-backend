@@ -8,31 +8,33 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
+from db import get_db, engine
 from models import Base, BigSet, Set
 from schemas import BigSetResponse, SetGroupedResponse, SetResponse, SetBase, BigSetCreate, BigSetFull, \
     AddSetToBigSetRequest
+from services.big_set_service import BigSetService
 
 # Load environment variables
 load_dotenv()
 
-# Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+psycopg://postgres:postgres@localhost:5432/mine"
-)
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# # Database configuration
+# DATABASE_URL = os.getenv(
+#     "DATABASE_URL",
+#     "postgresql+psycopg://postgres:postgres@localhost:5432/mine"
+# )
+# engine = create_engine(DATABASE_URL)
+# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Create tables
 Base.metadata.create_all(bind=engine)
 
 # Database dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# def get_db():
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
 
 description = """
 ChimichangApp API helps you do awesome stuff. 🚀
@@ -98,28 +100,25 @@ async def read_items(db: Session = Depends(get_db)):
     return [SetGroupedResponse(description=desc, count=count) for desc, count in results]
 
 
-@app.get("/big-sets/", response_model=list[BigSetResponse])
-async def read_big_sets(db: Session = Depends(get_db)):
+@app.get("/big-sets", response_model=list[BigSetFull])
+async def read_big_sets(today: bool, db: Session = Depends(get_db), big_set_service: BigSetService = Depends()):
     """
     Получение всех BigSet
     """
-    results = db.query(BigSet.id, BigSet.description, BigSet.created, BigSet.finished).all()
-    return [BigSetResponse(id=obj.id, description=obj.description, created=obj.created, finished=obj.finished) for obj in results]
+    query = db.query(BigSet.id, BigSet.description, BigSet.created, BigSet.finished)
+    if today:
+        query = query.filter(func.date(BigSet.created) == datetime.now().date())
+    results = query.all()
+    big_sets = [big_set_service.get_big_set_full(obj.id) for obj in results]
+    return big_sets
 
 
 @app.get("/big-sets/{big_set_id}", response_model=BigSetFull)
-async def read_big_sets(big_set_id: int, db: Session = Depends(get_db)):
+async def read_big_sets(big_set_id: int, db: Session = Depends(get_db), big_set_service: BigSetService = Depends()):
     """
     Получение всех BigSet
     """
-    big_set = db.query(BigSet).filter(BigSet.id == big_set_id).first()
-    sets = db.query(Set).filter(Set.big_set_id == big_set_id).all()
-    return BigSetFull(
-        id=big_set.id,
-        description=big_set.description,
-        created=big_set.created,
-        finished=big_set.finished,
-        sets=sets)
+    return big_set_service.get_big_set_full(big_set_id)
 
 
 @app.post("/big-sets/{big_set_id}/sets", response_model=BigSetFull)
@@ -246,6 +245,25 @@ async def delete_set(set_id: int, db: Session = Depends(get_db)):
         status_code=200,
         content={"message": "Set was deleted"}
     )
+
+
+@app.post("/sets", response_model=SetResponse)
+async def add_set(set: SetBase, db: Session = Depends(get_db)):
+    # Create a new Set instance from the Pydantic model
+    db_set = Set(
+        date=set.date,
+        duration=set.duration,
+        description=set.description,
+        comments=set.comments,
+        distractions=set.distractions
+    )
+    # Add the new set to the database
+    db.add(db_set)
+    db.commit()
+    db.refresh(db_set)  # Refresh to get the generated ID
+    print(db_set)
+    print('after adding a set')
+    return db_set
 
 
 @app.put("/set/{set_id}", response_model=SetResponse)

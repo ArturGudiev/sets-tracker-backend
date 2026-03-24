@@ -54,10 +54,8 @@ class BigSetResponse(CamelModel):
     finished: Optional[datetime]
 
 
-
 class SetResponse(SetBase):
     id: int
-
 
 
 class BigSetFull(CamelModel):
